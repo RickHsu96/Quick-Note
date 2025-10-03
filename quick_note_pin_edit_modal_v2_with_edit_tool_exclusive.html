@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quick Note｜一頁式快速筆記</title>
+  <meta name="description" content="Quick Note：把靈感當訊息一樣，秒記、秒找、秒回顧。單一 HTML 檔即可使用。" />
+  <style>
+    :root{
+      --bg:#0b0f15;         /* 深色背景 */
+      --elev:#111827;       /* 區塊底色 */
+      --muted:#9CA3AF;      /* 次要文字 */
+      --text:#e5e7eb;       /* 主文字 */
+      --brand:#3B82F6;      /* 品牌藍 */
+      --me:#2563EB;         /* 自己訊息泡泡 */
+      --other:#374151;      /* 其他/系統訊息泡泡 */
+      --ok:#10B981;         /* 成功 */
+      --warn:#F59E0B;       /* 提醒 */
+      --danger:#EF4444;     /* 刪除 */
+      --ring: rgba(59,130,246,.35);
+      --radius:16px;
+      --card-w:260px;       /* Pinterest 磚塊寬 */
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:linear-gradient(180deg,#0b0f15 0%, #0e141d 100%);
+      color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, "Noto Sans TC", "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      display:flex; align-items:center; justify-content:center; padding:20px;
+    }
+    .app{
+      width:min(980px,100%); height:min(820px, calc(100vh - 40px));
+      background:rgba(17,24,39,.9); backdrop-filter: blur(8px);
+      border:1px solid rgba(255,255,255,.06); border-radius:24px; overflow:hidden;
+      display:grid; grid-template-rows: auto 1fr auto;
+      box-shadow:0 10px 30px rgba(0,0,0,.45);
+    }
+    /* Header */
+    .top{
+      display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid rgba(255,255,255,.06);
+      background:linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0));
+    }
+    .logo{width:36px; height:36px; border-radius:12px; display:grid; place-items:center; background:linear-gradient(135deg,var(--brand),#8b5cf6); font-weight:700}
+    .brand{display:flex; flex-direction:column; line-height:1.15}
+    .brand b{font-size:18px}
+    .brand span{font-size:12px; color:var(--muted)}
+    .top .spacer{flex:1}
+    .chip{
+      display:inline-flex; align-items:center; gap:8px; padding:8px 12px; font-size:12px; color:#cbd5e1;
+      background:#0b1220; border:1px solid rgba(255,255,255,.07); border-radius:999px;
+    }
+    .chip button{appearance:none; border:0; background:transparent; color:#cbd5e1; cursor:pointer}
+    .chip .dot{width:8px; height:8px; border-radius:50%; background:var(--ok)}
+
+    /* Chat area */
+    .chat{ overflow:auto; padding:18px 16px 24px; display:flex; flex-direction:column; gap:14px; scroll-behavior:smooth; overflow-anchor:none; }
+    .group{display:flex; flex-direction:column; gap:6px; align-items:flex-end}
+    .row{display:flex; gap:8px; align-items:flex-end}
+    .row.me{justify-content:flex-end}
+    .avatar{width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#1f2937,#0ea5e9); opacity:.8}
+    .bubble{
+      max-width:min(78vw,680px); padding:10px 12px; border-radius:14px; position:relative; border:1px solid rgba(255,255,255,.06);
+      background:var(--other); color:#e5e7eb; box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+      word-wrap:break-word; white-space:pre-wrap; line-height:1.45; font-size:15px;
+    }
+    .row.me > .bubble{background:var(--me); border-color:rgba(255,255,255,.14)}
+    .meta{font-size:11px; color:#cbd5e1; margin:0}
+    .tags{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
+    .tag{font-size:11px; padding:4px 8px; border-radius:999px; border:1px solid rgba(255,255,255,.15); opacity:.9}
+
+    /* Unified card */
+    .card{max-width:min(78vw,680px); width:fit-content; padding:10px 12px; border-radius:16px; border:1px solid rgba(255,255,255,.09); background:rgba(11,18,32,.9); box-shadow:0 8px 22px rgba(0,0,0,.35); overflow:hidden;}
+    .row.me .card{background:rgba(11,18,32,.92); border-color:rgba(59,130,246,.25)}
+    .card .bubble{background:transparent; border:0; box-shadow:none; padding:0; color:#eaf2ff; max-width:unset}
+    .card .info{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:6px}
+    .card .tags{gap:8px}
+    .card .tag{background:rgba(255,255,255,.04)}
+
+    /* Date separators */
+    .day{display:flex; align-items:center; gap:12px; margin:18px 0 6px}
+    .day .line{flex:1; height:1px; background:linear-gradient(90deg, rgba(255,255,255,.06), rgba(255,255,255,.02))}
+    .day .label{font-size:12px; color:#9CA3AF; padding:4px 10px; border:1px solid rgba(255,255,255,.08); border-radius:999px; background:#0b1220}
+
+    /* === Pinterest 視圖（最矮欄 + 絕對定位） === */
+    .chat.mode-pin{position:relative; padding:18px 16px 24px}
+    .mode-pin .group{position:absolute; width:var(--card-w); margin:0; align-items:initial}
+    .mode-pin .row{display:block; margin:0}
+    .mode-pin .row.me{justify-content:initial}
+    .mode-pin .avatar{display:none}
+    .mode-pin .card{max-width:unset; width:auto; display:block; transition:transform .18s ease, box-shadow .18s ease}
+    .mode-pin .card:hover{transform:translateY(-2px); box-shadow:0 16px 30px rgba(0,0,0,.35)}
+    .mode-pin .day{position:absolute; left:0; width:100%}
+
+    /* 響應式：只調整磚塊寬度（欄數交給 JS 決定） */
+    @media (min-width:1200px){ .chat.mode-pin{ --card-w: 280px; } }
+    @media (max-width:980px){ .chat.mode-pin{ --card-w: 240px; } }
+    @media (max-width:720px){ .chat.mode-pin{ --card-w: 220px; } }
+
+    /* Composer */
+    .composer{ display:grid; grid-template-columns: 1fr auto; gap:12px; padding:12px; border-top:1px solid rgba(255,255,255,.06); background:linear-gradient(0deg, rgba(255,255,255,.02), rgba(255,255,255,0)); }
+    .box{display:flex; gap:10px; align-items:flex-end; background:#0b1220; border:1px solid rgba(255,255,255,.08); border-radius:16px; padding:10px; outline:none}
+    .box:focus-within{box-shadow:0 0 0 3px var(--ring)}
+    textarea{ flex:1; resize:none; max-height:32dvh; min-height:48px; background:transparent; border:0; color:var(--text); font:15px/1.5 ui-sans-serif, system-ui, -apple-system, "Noto Sans TC", "Segoe UI"; outline:none; }
+    .toolbar{display:flex; gap:8px; align-items:center}
+    select, button{ appearance:none; border:1px solid rgba(255,255,255,.12); background:#0b1220; color:#e5e7eb; padding:10px 12px; border-radius:12px; font-size:14px; cursor:pointer; }
+    button.primary{background:var(--brand); border-color:transparent; color:white; font-weight:600}
+    button.ghost{background:transparent}
+    button.danger{background:transparent; border-color:rgba(239,68,68,.35); color:#fecaca}
+
+    /* Empty state */
+    .empty{opacity:.7; font-size:14px; text-align:center; margin-top:10vh}
+
+    /* Mobile tweaks */
+    @media (max-width:640px){ .app{height:calc(100vh - 40px)} .bubble{max-width:88vw} }
+  
+    /* 讓 Pinterest 佈局有可捲動高度（以 CSS 變數控制的尾端空白） */
+    .chat.mode-pin::after{
+      content:"";
+      display:block;
+      height: var(--pin-space, 24px);
+    }
+
+
+    /* === Pinterest 精簡視圖（純內容小卡片） === */
+    .chat.mode-pin-mini{position:relative; padding:18px 16px 24px}
+    .mode-pin-mini .group{position:absolute; width:var(--card-w); margin:0; align-items:initial}
+    .mode-pin-mini .row{display:block; margin:0}
+    .mode-pin-mini .row.me{justify-content:initial}
+    .mode-pin-mini .avatar{display:none}
+    .mode-pin-mini .card{max-width:unset; width:auto; display:block; transition:transform .18s ease, box-shadow .18s ease}
+    .mode-pin-mini .card:hover{transform:translateY(-2px); box-shadow:0 16px 30px rgba(0,0,0,.35)}
+    .mode-pin-mini .day{position:absolute; left:0; width:100%}
+    /* 隱藏底部資訊列 */
+    .mode-pin-mini .card .info{display:none}
+    /* 精簡卡片內距（避免過多留白） */
+    .mode-pin-mini .card{padding:8px 10px}
+    /* 讓 Pinterest 精簡模式也有可捲動高度（與 pin 共用機制） */
+    .chat.mode-pin-mini::after{
+      content:"";
+      display:block;
+      height: var(--pin-space, 24px);
+    }
+
+
+/* 對齊日期條與內容區，避免 JS 尚未跑完時的瞬間錯位 */
+.mode-pin .day, .mode-pin-mini .day { box-sizing: border-box; padding: 0 16px; }
+
+/* 置中欄位：讓日期條與欄位同寬並在上層 */
+.mode-pin .day, .mode-pin-mini .day { box-sizing: border-box; padding: 0 16px; z-index: 2; }
+
+/* 保證 .day 初始不撐滿 padding 區且不壓到卡片，JS 會覆蓋位置 */
+.mode-pin .day, .mode-pin-mini .day { box-sizing: border-box; padding: 0 16px; z-index: 2; }
+
+/* 日期上下安全距（可調）：預設 10px；覆寫 --day-safe 可改間距 */
+.mode-pin, .mode-pin-mini { --day-safe: 12px; } /* 稍微加大一點更舒服 */
+
+
+/* === Chat Compact (精簡) for Chat view === */
+.chat.chat-compact .avatar{ display:none; }
+.chat.chat-compact .card .info{ display:none; }
+.chat.chat-compact .card{ padding:8px 10px; }
+.chat.chat-compact .bubble{ line-height:1.55; }
+/* Optional: slightly tighter gaps */
+.chat.chat-compact{ gap:10px; }
+/* --- Markdown styles --- */
+.bubble.md { line-height: 1.65; }
+.bubble.md h1,.bubble.md h2,.bubble.md h3,.bubble.md h4,.bubble.md h5,.bubble.md h6{ 
+  margin: .2em 0 .4em; line-height:1.35;
+}
+.bubble.md p{ margin: .2em 0; }
+.bubble.md ul, .bubble.md ol{ margin: .3em 0; padding-left: 1.2em; }
+.bubble.md li + li{ margin-top: .15em; }
+.bubble.md code{ background: rgba(255,255,255,.06); padding: 0 .25em; border-radius: 6px; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; }
+.bubble.md pre{ background: rgba(255,255,255,.06); padding: .6em .8em; border-radius: 12px; overflow:auto; }
+.bubble.md pre code{ background: transparent; padding:0; }
+.bubble.md blockquote{ border-left: 2px solid var(--muted); margin: .4em 0; padding: .1em .8em; color: var(--muted); }
+.bubble.md hr{ border:0; border-top:1px solid rgba(255,255,255,.08); margin: .5em 0; }
+.bubble.md a{ color: var(--brand); text-decoration: underline; word-break: break-word; }
+/* composer preview box look */
+.bubble.preview{ opacity:.95; }
+
+
+/* === Edit icon + editor modal === */
+.iconbtn{
+  width:28px; height:28px; border-radius:999px;
+  display:grid; place-items:center;
+  border:1px solid rgba(255,255,255,.14);
+  background:transparent; color:#cbd5e1; cursor:pointer;
+}
+.iconbtn:hover{ background:rgba(255,255,255,.06); }
+.iconbtn.edit-btn{ border-color: rgba(59,130,246,.35); color:#93c5fd; }
+
+.info .meta-right{ display:flex; align-items:center; gap:8px; }
+
+.modal{ position:fixed; inset:0; z-index:1000; display:none; place-items:center;
+  background:rgba(0,0,0,.45); backdrop-filter: blur(2px);
+}
+.modal.show{ display:grid; }
+.modal .panel{
+  width:min(620px, 92vw);
+  background:rgba(17,24,39,.96);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:16px; padding:14px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.55);
+}
+.modal .panel h3{ margin:4px 0 10px; font-size:16px; }
+.modal .panel .row{ display:flex; gap:10px; align-items:center; }
+.modal .panel .row > *{ flex:1; }
+#editText{
+  width:100%; min-height:160px; resize:vertical;
+  background:#0b1220; border:1px solid rgba(255,255,255,.08);
+  color:var(--text); border-radius:12px; padding:10px; outline:none;
+}
+.modal .actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:10px; }
+
+
+/* make button.tag with only icon look centered */
+button.tag svg{ display:block; }
+
+.chat.no-smooth{ scroll-behavior:auto !important; }
+.chat.hideDuringRender{ visibility:hidden !important; }
+</style>
+<style>
+/* === 完成工具（點卡片 → 變灰階） === */
+.iconbtn.active{
+  background: rgba(16,185,129,.14);
+  border-color: rgba(16,185,129,.45);
+  color:#a7f3d0;
+  box-shadow: 0 0 0 2px rgba(16,185,129,.12) inset;
+}
+.card.card--done{
+  filter: grayscale(1) brightness(.95) contrast(.98);
+  opacity:.78;
+  transition: filter .15s ease, opacity .15s ease;
+}
+/* 小小的勾勾游標，啟用工具時僅限內容區與卡片 */
+:root{
+  --done-cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="10" fill="rgba(16,185,129,.18)" stroke="rgba(16,185,129,.85)" stroke-width="2"/><path d="M7 12.5l3 3 7-7" stroke="rgba(16,185,129,.95)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>') 2 2, pointer;
+}
+.tool-done-on #chat{ cursor: var(--done-cursor); }
+.tool-done-on #chat .card{ cursor: var(--done-cursor); }
+</style>
+<style>
+/* === 刪除工具（點卡片 → 直接刪除） === */
+:root{
+  --delete-cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect x="4" y="7" width="16" height="13" rx="2" ry="2" fill="rgba(244,63,94,.18)" stroke="rgba(244,63,94,.85)" stroke-width="2"/><path d="M7 10h2v7H7zM11 10h2v7h-2zM15 10h2v7h-2z" fill="rgba(244,63,94,.85)"/><path d="M8 5h8" stroke="rgba(244,63,94,.85)" stroke-width="2"/></svg>') 2 2, pointer;
+}
+.tool-delete-on #chat{ cursor: var(--delete-cursor); }
+.tool-delete-on #chat .card{ cursor: var(--delete-cursor); }
+/* 刪除時的淡出效果（若當前頁面不重渲染時） */
+.card.is-removing{
+  opacity: 0;
+  transform: scale(.98);
+  transition: opacity .15s ease, transform .15s ease;
+}
+</style>
+<style>
+.layout-lock .mode-pin .card,
+.layout-lock .mode-pin-mini .card{
+  transition: none !important;
+}
+</style>
+<style>
+:root{
+  --edit-cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect x="3" y="3" width="18" height="18" rx="4" ry="4" fill="rgba(59,130,246,.18)" stroke="rgba(59,130,246,.85)" stroke-width="2"/><path d="M8 16l1.5-4.5L15 6l3 3-5.5 5.5L8 16z" fill="rgba(59,130,246,.95)"/></svg>') 2 2, pointer;
+}
+.tool-edit-on #chat{ cursor: var(--edit-cursor); }
+.tool-edit-on #chat .card{ cursor: var(--edit-cursor); }
+#editToolBtn.active{
+  background: rgba(59,130,246,.16);
+  border-color: rgba(59,130,246,.45);
+  color:#bfdbfe;
+  box-shadow: 0 0 0 2px rgba(59,130,246,.12) inset;
+}
+</style>
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- Header -->
+    <header class="top">
+      <div class="logo" aria-hidden>✍️</div>
+      <div class="brand">
+        <b>Quick Note</b>
+        <span>把靈感當訊息一樣快速記</span>
+      </div>
+      <div class="spacer"></div>
+      <div class="chip" title="本機儲存，離線可用">
+        <span class="dot"></span>
+        <span>已啟用本機儲存</span>
+        <button id="exportBtn" title="匯出所有筆記（JSON）">匯出</button>
+      </div>
+      <div class="chip" title="切換顯示模式">
+        <button id="viewBtn">視圖：聊天</button>
+      </div>
+      <div class="chip" title="切換精簡卡片（Pinterest）">
+        <button id="compactBtn">精簡：關</button>
+      </div>
+    
+<button id="doneToolBtn" class="iconbtn" title="完成工具（點卡片變灰階）" aria-pressed="false" aria-label="完成工具">
+  <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+    <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/>
+  </svg>
+</button>
+    
+<button id="deleteToolBtn" class="iconbtn" title="刪除工具（點卡片直接刪除）" aria-pressed="false" aria-label="刪除工具">
+  <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+    <path fill="currentColor" d="M9 3h6v2h5v2H4V5h5V3zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"/>
+  </svg>
+</button>
+
+<button id="editToolBtn" class="iconbtn" title="編輯工具（點卡片直接編輯）" aria-pressed="false" aria-label="編輯工具">
+  <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+    <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm14.71-9.04a1 1 0 0 0 0-1.41l-1.8-1.8a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.59-1.67z"/>
+  </svg>
+</button>
+    </header>
+
+    <!-- Chat Area -->
+    <main class="chat" id="chat" aria-live="polite" aria-label="訊息區">
+      <div class="empty" id="empty">還沒有內容。試著在下方輸入框打字，按 Enter 送出（Shift+Enter 換行）。</div>
+    </main>
+
+    <!-- Composer -->
+    <form class="composer" id="composer" autocomplete="off">
+      <div class="box">
+        <textarea id="input" placeholder="輸入你的靈感⋯⋯（Enter 送出 / Shift+Enter 換行）" aria-label="輸入新筆記"></textarea>
+        <div id="mdPreview" class="bubble md preview" style="display:block; margin-top:8px;"></div>
+        <div class="toolbar">
+          <select id="label">
+            <option value="idea">#靈感</option>
+            <option value="todo">#待辦</option>
+            <option value="quote">#摘錄</option>
+            <option value="memo">#備忘</option>
+          </select>
+          <select id="size" title="卡片尺寸">
+            <option value="m" selected>M 一般</option>
+            <option value="s">S 小卡</option>
+            <option value="l">L 寬卡</option>
+          </select>
+          <button type="button" id="imgBtn" title="加入圖片">圖片</button>
+          <input type="file" id="imgInput" accept="image/*" hidden />
+        </div>
+      </div>
+      <div class="actions" style="display:flex; gap:8px; align-items:center">
+        <button type="button" class="ghost" id="clearBtn" title="清空所有筆記">清空</button>
+        <button type="button" class="ghost" id="mdToggle" title="切換 Markdown 預覽">MD 預覽</button>
+        <button class="primary" type="submit" title="送出">送出</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    // ==========================
+    // Quick Note — 單檔版
+    // 修正：括號/大括號錯置造成的 SyntaxError；改為 Pinterest 最矮欄演算法
+    // ==========================
+
+    const $ = sel => document.querySelector(sel);
+    const chat = $('#chat');
+    const input = $('#input');
+    const labelSel = $('#label');
+    const sizeSel = $('#size');
+    const imgBtn = $('#imgBtn');
+    const imgInput = $('#imgInput');
+    let pendingImage = null;
+    const composer = $('#composer');
+    const exportBtn = $('#exportBtn');
+    const clearBtn = $('#clearBtn');
+    const viewBtn = $('#viewBtn');
+    const compactBtn = $('#compactBtn');
+    const COMPACT_KEY = 'pinCompact';
+    const empty = $('#empty');
+    let _stickOnAdd = false; // 新增卡片時才自動捲到底
+    let _preserveScroll = false; // 刪除/編輯時保持視窗位置
+    let _scrollTopBefore = 0;
+
+    const STORAGE_KEY = 'quicknote_messages_v1';
+    const VIEW_KEY = 'quicknote_view_v1';
+
+    // ---------- Storage ----------
+    function load(){ try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch(e){ return []; } }
+    function save(list){ localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); }
+
+    let messages = load();
+
+    // ---------- Utils ----------
+
+// ---------- Markdown (escape-first) ----------
+function mdEscape(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function mdToHtml(src){
+  // Work on escaped text to avoid XSS, then introduce safe tags.
+  let s = mdEscape(src);
+
+  // Fences ```code``` (support language hint but ignore for styling)
+  const fenceRE = /```([\s\S]*?)```/g;
+  s = s.replace(fenceRE, (_,code)=> `<pre><code>${code.replace(/\\n/g,'\n')}</code></pre>`);
+
+  // Headings ######..#
+  s = s.replace(/^(######)\s*(.+)$/gm, '<h6>$2</h6>');
+  s = s.replace(/^(#####)\s*(.+)$/gm,  '<h5>$2</h5>');
+  s = s.replace(/^(####)\s*(.+)$/gm,   '<h4>$2</h4>');
+  s = s.replace(/^(###)\s*(.+)$/gm,    '<h3>$2</h3>');
+  s = s.replace(/^(##)\s*(.+)$/gm,     '<h2>$2</h2>');
+  s = s.replace(/^#\s*(.+)$/gm,        '<h1>$1</h1>');
+
+  // Blockquotes
+  s = s.replace(/^\s*>\s?(.*)$/gm, '<blockquote>$1</blockquote>');
+
+  // Horizontal rule
+  s = s.replace(/^\s*[-*_]{3,}\s*$/gm, '<hr>');
+
+  // Lists (ordered + unordered) – simple blocks
+  // Ordered
+  s = s.replace(/^(?:\d+\.\s+.*(?:\n\d+\.\s+.*)*)/gm, m=>{
+    const items = m.split(/^\d+\.\s+/gm).filter(Boolean).map(t=>`<li>${t.trim()}</li>`).join('');
+    return `<ol>${items}</ol>`;
+  });
+  // Unordered
+  s = s.replace(/^(?:[*+-]\s+.*(?:\n[*+-]\s+.*)*)/gm, m=>{
+    const items = m.split(/^[*+-]\s+/gm).filter(Boolean).map(t=>`<li>${t.trim()}</li>`).join('');
+    return `<ul>${items}</ul>`;
+  });
+
+  // Inline code
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Links [text](url)
+  s = s.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+  // Bold/italic (order matters)
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  s = s.replace(/_([^_]+)_/g, '<em>$1</em>');
+
+  // Paragraphs: split by double line breaks
+  s = s.replace(/(?:\r?\n){2,}/g, '</p><p>');
+  // Wrap everything in <p> if not already block-level
+  if(!/^\s*<p>/.test(s)) s = '<p>'+s+'</p>';
+  
+// Task list to checkboxes (supports "- [ ]" / "- [x]" and plain "[] " / "[x] " at line start)
+(function(){
+  let taskIdx = -1;
+  // list items
+  s = s.replace(/<li>\s*\[\s*(x|X)?\s*\]\s*([\s\S]*?)<\/li>/g, function(_, mark, text) {
+    taskIdx++;
+    const checked = !!mark;
+    return `<li class="task"><label><input type="checkbox" class="taskbox" data-task-index="${taskIdx}" ${checked ? 'checked' : ''}> ${text}</label></li>`;
+  });
+  // per-line tasks inside <p>: transform every line starting with [] / [x]
+  s = s.replace(/<p>([\s\S]*?)<\/p>/g, function(_, para){
+    return '<p>' + para.replace(/(^|<br\s*\/?>(?!\s*<)|\n)\s*\[\s*(x|X)?\s*\]\s+([\s\S]*?)(?=(<br\s*\/?>(?!\s*<)|\n|$))/g, function(__, lead, mark, text){
+      taskIdx++;
+      const checked = !!mark;
+      return `${lead}<label class="taskline"><input type="checkbox" class="taskbox" data-task-index="${taskIdx}" ${checked ? 'checked' : ''}> ${text}</label>`;
+    }) + '</p>';
+  });
+
+})();
+
+  return s;
+}
+
+// Preview toggle
+const mdToggle = document.querySelector('#mdToggle');
+const mdPreview = document.querySelector('#mdPreview');
+let mdPreviewOn = true;
+renderMdPreview();
+function renderMdPreview(){
+  if(!mdPreviewOn) return;
+  mdPreview.innerHTML = mdToHtml(input.value);
+}
+if(mdToggle){
+  mdToggle.addEventListener('click', ()=>{
+    mdPreviewOn = !mdPreviewOn;
+    mdPreview.style.display = mdPreviewOn ? 'block' : 'none';
+    mdToggle.textContent = mdPreviewOn ? 'MD 預覽：開' : 'MD 預覽';
+    renderMdPreview();
+  });
+}
+if(input){
+  input.addEventListener('input', ()=> renderMdPreview());
+}
+    function fmt(ts){ const d = new Date(ts); const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); const hh=String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0'); return `${y}-${m}-${day} ${hh}:${mm}`; }
+    function dateKey(ts){ const d=new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+    function dayLabel(ts){ try{ return new Date(ts).toLocaleDateString('zh-TW', { year:'numeric', month:'2-digit', day:'2-digit', weekday:'short' }); }catch(e){ return dateKey(ts); } }
+    function tagText(tag){ return ({idea:'靈感', todo:'待辦', quote:'摘錄', memo:'備忘'})[tag] || tag; }
+
+    // ---------- Render ----------
+    
+function render(){
+  const nearBottom = (chat.scrollHeight - chat.scrollTop - chat.clientHeight) < 120;
+
+  // Anchor before DOM changes
+  const chatRect = chat.getBoundingClientRect();
+  let anchorId = null;
+  let anchorOffset = 0;
+  if (!_stickOnAdd && !_preserveScroll){
+    let bestDist = Infinity;
+    const bubbles = chat.querySelectorAll('.bubble.md');
+    bubbles.forEach(b => {
+      const id = b && b.dataset ? String(b.dataset.msgId || '') : '';
+      if(!id) return;
+      const r = b.getBoundingClientRect();
+      const top = r.top - chatRect.top;
+      if (r.bottom >= chatRect.top && r.top <= chatRect.bottom){
+        const dist = Math.abs(top);
+        if (dist < bestDist){
+          bestDist = dist;
+          anchorId = id;
+          anchorOffset = top;
+        }
+      }
+    });
+    if (!anchorId && bubbles.length){
+      const b = bubbles[0];
+      anchorId = String(b.dataset.msgId || '');
+      const r = b.getBoundingClientRect();
+      anchorOffset = r.top - chatRect.top;
+    }
+  }
+
+  document.body.classList.add('layout-lock');
+  chat.classList.add('no-smooth');
+
+  chat.innerHTML = '';
+  if(!messages.length){
+    chat.appendChild(empty);
+    empty.style.display = 'block';
+    _stickOnAdd = false;
+    _preserveScroll = false;
+    chat.classList.remove('no-smooth');
+    document.body.classList.remove('layout-lock');
+    return;
+  }
+  empty.style.display = 'none';
+  messages.sort((a,b)=> a.ts - b.ts);
+
+  let lastDay = null;
+  for(const msg of messages){
+    const k = dateKey(msg.ts);
+    if(k !== lastDay){
+      const day = document.createElement('div');
+      day.className = 'day';
+      const lineL = document.createElement('div'); lineL.className = 'line';
+      const dateLabelEl = document.createElement('div'); dateLabelEl.className = 'label'; dateLabelEl.textContent = dayLabel(msg.ts);
+      const lineR = document.createElement('div'); lineR.className = 'line';
+      day.appendChild(lineL); day.appendChild(dateLabelEl); day.appendChild(lineR);
+      chat.appendChild(day);
+      lastDay = k;
+    }
+
+    const group = document.createElement('div'); group.className = 'group';
+    const row = document.createElement('div'); row.className = 'row me';
+    const bubble = document.createElement('div'); bubble.className = 'bubble md'; bubble.dataset.msgId = String((msg && msg.ts) || '');
+    bubble.innerHTML = mdToHtml(msg.text);
+
+    const tags = document.createElement('div'); tags.className = 'tags';
+    const t = document.createElement('span'); t.className = 'tag'; t.textContent = `#${tagText(msg.tag)}`; tags.appendChild(t);
+    const del = document.createElement('button'); del.textContent = '刪除'; del.className = 'tag'; del.style.cursor='pointer'; del.style.borderColor='rgba(239,68,68,.35)'; del.style.color='#fecaca'; del.title='刪除此則'; del.addEventListener('click', ()=> removeOne(msg.id)); tags.appendChild(del);
+
+    const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = fmt(msg.ts);
+    const avatar = document.createElement('div'); avatar.className = 'avatar';
+
+    const card = document.createElement('div'); const sizeClass = msg.size==='l' ? ' card--wide' : (msg.size==='s' ? ' card--s' : '');
+    card.className = 'card' + sizeClass; card.appendChild(bubble);
+    if(msg.img){ const media = document.createElement('div'); media.className = 'media'; const img = document.createElement('img'); img.src = msg.img; img.alt = 'note image'; img.addEventListener('load', reflowPin); media.appendChild(img); card.appendChild(media); }
+    const info = document.createElement('div'); info.className = 'info'; const rightBox = document.createElement('div'); rightBox.className = 'meta-right'; const editBtn = document.createElement('button'); editBtn.className = 'tag'; editBtn.style.cursor='pointer'; editBtn.setAttribute('title','編輯這張卡片'); editBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm14.71-9.04a1 1 0 0 0 0-1.41l-1.8-1.8a1 1 0 0 0-1.41 0l-1.13 1.13 3.75 3.75 1.59-1.67z"/></svg>'; editBtn.addEventListener('click', ()=> openEditor(msg.id)); tags.appendChild(editBtn); rightBox.appendChild(meta); info.appendChild(tags); info.appendChild(rightBox); card.appendChild(info);
+
+    row.appendChild(card); row.appendChild(avatar); group.appendChild(row); chat.appendChild(group);
+  }
+
+  const isPin = chat.classList.contains('mode-pin') || chat.classList.contains('mode-pin-mini');
+  if(isPin){
+    try{ reflowPin(); }catch(_){}
+  }
+
+  if (_stickOnAdd || nearBottom){
+    chat.scrollTop = chat.scrollHeight;
+  } else if (_preserveScroll){
+    chat.scrollTop = Math.max(0, Math.min(_scrollTopBefore, chat.scrollHeight - chat.clientHeight));
+  } else if (anchorId){
+    const node = chat.querySelector(`.bubble.md[data-msg-id="${anchorId}"]`);
+    if (node){
+      const newTop = node.getBoundingClientRect().top - chat.getBoundingClientRect().top;
+      chat.scrollTop = chat.scrollTop + (newTop - anchorOffset);
+    }
+  }
+
+  _stickOnAdd = false;
+  _preserveScroll = false;
+  chat.classList.remove('no-smooth');
+  document.body.classList.remove('layout-lock');
+}
+// ---------- CRUD ----------
+
+    function add(text, tag, size, img){ chat.classList.add('no-smooth');
+      const trimmed=(text||'').trim(); if(!trimmed && !img) return;
+      const item={ id: crypto.randomUUID(), text: trimmed, tag: tag||'idea', size: size||'m', img: img||null, ts: Date.now() };
+      messages.push(item); save(messages);
+      _stickOnAdd = true; // 僅在新增時貼底
+      render();
+    }
+    function removeOne(id){ chat.classList.add('no-smooth'); _scrollTopBefore = chat.scrollTop; _preserveScroll = true; messages = messages.filter(x=>x.id!==id); save(messages); render(); }
+    function removeAll(){ if(!messages.length) return; if(confirm('確定要清空所有筆記嗎？此動作無法復原。')){ messages=[]; save(messages); render(); } }
+
+    // ---------- Composer behaviors ----------
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); composer.requestSubmit(); } });
+    function autosize(){ input.style.height='auto'; input.style.height = Math.min(input.scrollHeight, window.innerHeight*0.32) + 'px'; }
+    input.addEventListener('input', autosize);
+    composer.addEventListener('submit', (e)=>{ e.preventDefault(); add(input.value, labelSel.value, (sizeSel&&sizeSel.value)||'m', pendingImage); input.value=''; autosize(); input.focus(); if(imgInput) imgInput.value=''; pendingImage=null; });
+
+    // 圖片附件
+    if(imgBtn && imgInput){ imgBtn.addEventListener('click', ()=> imgInput.click()); imgInput.addEventListener('change', ()=>{ const f = imgInput.files && imgInput.files[0]; if(!f) return; const reader = new FileReader(); reader.onload = e => { pendingImage = e.target.result; }; reader.readAsDataURL(f); }); }
+
+    exportBtn.addEventListener('click', ()=>{ const blob = new Blob([JSON.stringify(messages, null, 2)], {type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`QuickNote_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); });
+    clearBtn.addEventListener('click', removeAll);
+
+    // ---------- Pinterest 佈局（最矮欄） ----------
+    function reflowPin(){
+  if(!(chat.classList.contains('mode-pin') || chat.classList.contains('mode-pin-mini'))) return;
+
+  const gap = 16;
+  const cs = getComputedStyle(chat);
+
+  // 讀取卡片寬度與容器 padding
+  let colW = parseFloat(cs.getPropertyValue('--card-w'));
+  if(!Number.isFinite(colW) || colW <= 0) colW = 260;
+
+  const pl = parseFloat(cs.paddingLeft)  || 0;
+  const pr = parseFloat(cs.paddingRight) || 0;
+  const pt = parseFloat(cs.paddingTop)   || 0;
+
+  // 額外的日期安全距（上下各一份），可用 CSS 變數 --day-safe 覆寫
+  let daySafe = parseFloat(cs.getPropertyValue('--day-safe'));
+  if(!Number.isFinite(daySafe)) daySafe = 10; // 預設 10px
+
+  const containerW = chat.clientWidth;                        // 含 padding
+  const contentW   = Math.max(0, containerW - pl - pr);       // 內容寬（扣掉左右 padding）
+
+  // 欄數（至少 1 欄）與實際佔用寬度
+  const cols = Math.max(1, Math.floor((contentW + gap) / (colW + gap)));
+  const usedW = cols * colW + (cols - 1) * gap;
+  const offsetX = pl + Math.max(0, Math.floor((contentW - usedW) / 2)); // 水平置中
+
+  const colHeights = Array(cols).fill(0);
+
+  // 像素對齊
+  const pxSnap = v => Math.round(v * (window.devicePixelRatio || 1)) / (window.devicePixelRatio || 1);
+
+  let maxY = 0;
+  const children = Array.from(chat.children);
+
+  for(const el of children){
+    if(el.classList.contains('day')){
+      const ds = getComputedStyle(el);
+      const mt = parseFloat(ds.marginTop)    || 0;
+      const mb = parseFloat(ds.marginBottom) || 0;
+
+      const y  = Math.max(...colHeights);
+
+      // 日期條位置：在目前最高欄位下方加入 daySafe 與 margin-top
+      el.style.position = 'absolute';
+      el.style.left  = pxSnap(offsetX) + 'px';
+      el.style.top   = pxSnap(pt + y + daySafe + mt) + 'px';
+      el.style.width = pxSnap(usedW) + 'px';
+      el.style.zIndex = 2;
+
+      // 進位高度：把 daySafe(上/下)、margin 與實際高度都算進去
+      const h  = el.offsetHeight;
+      const y2 = y + daySafe + mt + h + mb + daySafe + gap;
+      for(let i=0;i<cols;i++) colHeights[i] = y2;
+      maxY = Math.max(maxY, y2);
+    } else if(el.classList.contains('group')){
+      const h = el.offsetHeight;
+
+      // 放到最矮欄
+      let c = 0;
+      for(let i=1;i<cols;i++) if(colHeights[i] < colHeights[c]) c = i;
+
+      const x = offsetX + c * (colW + gap);
+      const y = pt + colHeights[c];
+
+      el.style.position = 'absolute';
+      el.style.left  = pxSnap(x) + 'px';
+      el.style.top   = pxSnap(y) + 'px';
+      el.style.width = pxSnap(colW) + 'px';
+      el.style.zIndex = 1;
+
+      colHeights[c] = colHeights[c] + h + gap;
+      maxY = Math.max(maxY, colHeights[c]);
+    }
+  }
+
+  // 容器高度
+  chat.style.setProperty('--pin-space', pxSnap(pt + maxY + 24) + 'px');
+}
+
+    // 清理 Pinterest 佈局在元素上留下的 inline style（切回聊天視圖時使用）
+    function resetPinInlineStyles(){
+      chat.style.height='';
+      chat.style.minHeight='';
+      chat.style.paddingBottom='';
+      chat.style.removeProperty('--pin-space');
+      chat.querySelectorAll('.group, .day').forEach(el=>{
+        el.style.position='';
+        el.style.transform='';
+        el.style.left='';
+        el.style.top='';
+        el.style.width='';
+      });
+    }
+
+    // ---------- 視圖切換 ----------
+    function applyView(mode){
+      if(mode==='chat'){
+        chat.classList.remove('mode-pin');
+        chat.classList.remove('mode-pin-mini');
+        resetPinInlineStyles();
+        if(viewBtn) viewBtn.textContent = '視圖：聊天';
+        localStorage.setItem(VIEW_KEY, 'chat');
+        render();
+        return;
+      }
+      // Pinterest 視圖
+      if(mode==='pin'){
+        resetPinInlineStyles();
+        chat.classList.remove('mode-pin-mini');
+        chat.classList.add('mode-pin');
+        if(viewBtn) viewBtn.textContent = '視圖：Pinterest ✓';
+        localStorage.setItem(VIEW_KEY, 'pin');
+        render();
+        requestAnimationFrame(reflowPin);
+        return;
+      }
+    }
+    const initView = localStorage.getItem(VIEW_KEY) || 'chat'; applyView(initView);
+    // 初始化精簡狀態（在視圖套用之後）
+    const initCompact = localStorage.getItem(COMPACT_KEY) === '1';
+    function applyCompact(on){
+      const isPinView = chat.classList.contains('mode-pin') || chat.classList.contains('mode-pin-mini');
+      // Always start from a clean state to avoid leftover classes across views
+      chat.classList.remove('chat-compact');
+      if (isPinView) chat.classList.remove('mode-pin-mini');
+
+      if(on){
+        localStorage.setItem(COMPACT_KEY, '1');
+        if(isPinView){
+          // Compact for Pinterest view
+          chat.classList.remove('mode-pin');
+          chat.classList.add('mode-pin-mini');
+          requestAnimationFrame(reflowPin);
+        }else{
+          // Compact for Chat view
+          chat.classList.add('chat-compact');
+        }
+        if(compactBtn) compactBtn.textContent = '精簡：開 ✓';
+      }else{
+        localStorage.removeItem(COMPACT_KEY);
+        // Ensure non-compact state in both views
+        if(isPinView){
+          chat.classList.remove('mode-pin-mini');
+          // If current view is pin, keep detailed pin mode
+          if((localStorage.getItem(VIEW_KEY) || 'chat') === 'pin'){
+            chat.classList.add('mode-pin');
+            requestAnimationFrame(reflowPin);
+          }
+        }else{
+          chat.classList.remove('chat-compact');
+        }
+        if(compactBtn) compactBtn.textContent = '精簡：關';
+      }
+    }
+    applyCompact(initCompact);
+
+    if(compactBtn){
+      compactBtn.addEventListener('click', ()=>{
+        const now = localStorage.getItem(COMPACT_KEY) === '1';
+        applyCompact(!now);
+      });
+    }
+
+    if(viewBtn){
+      viewBtn.addEventListener('click', ()=>{
+        const curr = localStorage.getItem(VIEW_KEY) || 'chat';
+        const next = (curr==='chat') ? 'pin' : 'chat';
+        applyView(next);
+        if(localStorage.getItem(COMPACT_KEY) === '1') applyCompact(true);
+        else applyCompact(false);
+        chat.scrollTop = chat.scrollTop + 1; // 觸發重算，避免某些瀏覽器捲動狀態不更新
+      });
+    }
+
+    // 視窗尺寸變化時重排（簡易 debounce）
+    let _rfId = 0; window.addEventListener('resize', ()=>{ cancelAnimationFrame(_rfId); _rfId = requestAnimationFrame(reflowPin); });
+
+    // ---------- Smoke Tests（不改動使用者資料） ----------
+    (function runSmokeTests(){
+      try{
+        console.assert(typeof add === 'function', 'add() 應存在');
+        console.assert(typeof render === 'function', 'render() 應存在');
+        const before = chat.classList.contains('mode-pin');
+        applyView('pin');
+        console.assert(chat.classList.contains('mode-pin'), 'pin 視圖應啟用');
+        // 建立兩個臨時群組，模擬不同高度的卡片
+        const g1 = document.createElement('div'); g1.className='group'; g1.style.height='100px';
+        const g2 = document.createElement('div'); g2.className='group'; g2.style.height='60px';
+        chat.appendChild(g1); chat.appendChild(g2);
+        reflowPin();
+        const t1 = g1.style.transform; const t2 = g2.style.transform;
+        console.assert(/^translate\([^,]+, [^)]+\)$/.test(t1) && /^translate\([^,]+, [^)]+\)$/.test(t2), 'group 應套用 translate(x,y)');
+        const hNum = parseFloat(chat.style.height)||0; console.assert(hNum>0, '容器高度應被設定');
+        g1.remove(); g2.remove();
+        applyView(before ? 'pin' : 'chat');
+        console.log('[Quick Note] Smoke tests OK (pin)');
+      }catch(err){ console.warn('[Quick Note] Smoke tests failed', err); }
+    })();
+
+    // ---------- 初始化 ----------
+    render(); autosize();
+  </script>
+
+<script>
+// --- Interactive task checkboxes (persist to message text) ---
+(function setupInteractiveTasks(){
+  if (window.__tasks_patched__) return; window.__tasks_patched__ = true;
+
+  function replaceNthTask(text, n, checked){
+    let k = 0;
+    const re = /^(\s*[-*]\s*)?\[\s*(x|X)?\s*\](?=\s|$)/gm;
+    return text.replace(re, function(match, prefix, mark){
+      if (k++ === n){
+        const lead = prefix || ''; return lead + (checked ? '[x] ' : '[] ');
+      }
+      return match;
+    });
+  }
+
+  document.addEventListener('change', function(e){
+    const box = e.target;
+    if (!(box instanceof HTMLInputElement)) return;
+    if (!box.classList.contains('taskbox')) return;
+
+    const bubble = box.closest('.bubble');
+    const msgId = bubble && bubble.dataset.msgId;
+    const idx = parseInt(box.getAttribute('data-task-index') || '-1', 10);
+    if (!msgId || idx < 0) return;
+
+    try {
+      const idStr = String(msgId);
+      const msg = (typeof messages !== 'undefined') ? messages.find(m => String(m.ts) === idStr) : null;
+      if (!msg || typeof msg.text !== 'string') return;
+
+      const newText = replaceNthTask(msg.text, idx, box.checked);
+      if (newText !== msg.text){
+        // --- Preserve viewport by anchoring to the toggled checkbox ---
+        const _chatEl = (typeof chat !== 'undefined' && chat) ? chat : document.getElementById('chat');
+        const _prevTop = _chatEl ? _chatEl.scrollTop : 0;
+        const _chatRectTop = _chatEl ? _chatEl.getBoundingClientRect().top : 0;
+        const _boxRectTop = box.getBoundingClientRect().top;
+        const _anchorOffset = _boxRectTop - _chatRectTop; // distance from top of chat viewport
+
+        // Persist
+        msg.text = newText;
+        if (typeof save === 'function') save(messages);
+
+        // Update only this bubble to avoid resetting scroll or reflowing the whole list
+        if (bubble) bubble.innerHTML = mdToHtml(msg.text);
+
+        // After DOM updates, re-anchor scroll so the toggled checkbox stays in place
+        requestAnimationFrame(()=>{
+          try{
+            const selector = `input.taskbox[data-task-index="${idx}"]`;
+            const newBox = bubble ? bubble.querySelector(selector) : null;
+            if (_chatEl){
+              if (newBox){
+                const newOffset = newBox.getBoundingClientRect().top - _chatEl.getBoundingClientRect().top;
+                _chatEl.scrollTop = Math.max(0, _prevTop + (newOffset - _anchorOffset));
+                try{ newBox.focus({ preventScroll: true }); }catch(_){ /* ignore */ }
+              } else {
+                _chatEl.scrollTop = _prevTop; // fallback
+              }
+            }
+            // If in Pinterest view, reflow columns (positions), but do not touch scrollTop
+            if (typeof reflowPin === 'function' && (_chatEl.classList.contains('mode-pin') || _chatEl.classList.contains('mode-pin-mini'))){
+              requestAnimationFrame(reflowPin);
+            }
+          }catch(_){ /* noop */ }
+        });
+      }
+    } catch(err){
+      console.error('Task toggle failed:', err);
+    }
+  }, false);
+})();
+</script>
+<style>
+/* Markdown task list + interactive cursor */
+.bubble.md li.task { list-style: none; margin-left: -1.2em; }
+.bubble.md li.task input { transform: translateY(1px); margin-right: .4em; }
+.bubble.md .taskbox { cursor: pointer; }
+.bubble.md .task label, .bubble.md label.taskline{ text-decoration: none; }
+.bubble.md .task label:has(> input.taskbox:checked),
+.bubble.md label.taskline:has(> input.taskbox:checked){ text-decoration: line-through; opacity:.8; }
+
+</style>
+
+
+<script>
+(function(){
+  return; // disabled: unified taskbox flow
+  if (window.__todo_enhancer_dom__) return; window.__todo_enhancer_dom__ = true;
+
+  function loadState(id){ try{ return JSON.parse(localStorage.getItem('todo:'+id)||'[]'); }catch(_){ return []; } }
+  function saveState(id, arr){ try{ localStorage.setItem('todo:'+id, JSON.stringify(arr)); }catch(_){} }
+
+  function enhanceBubble(bubble){
+    if (!bubble || !bubble.classList || !bubble.classList.contains('md')) return;
+    if (bubble.__todo_enhanced__) return;
+    const isPreview = bubble.classList.contains('preview');
+    const id = (bubble.dataset && (bubble.dataset.msgId || bubble.dataset.id)) ? String(bubble.dataset.msgId || bubble.dataset.id) : '';
+
+    let html = bubble.innerHTML;
+    if(!/\[(?:\s|x|X|)\]/.test(html)){ bubble.__todo_enhanced__ = true; return; }
+
+    // 1) List items: <li>[ ] text</li> / <li>[x] text</li>
+    let idx = -1;
+    html = html.replace(/<li>\s*\[\s*(x|X)?\s*\]\s*([\s\S]*?)<\/li>/g, function(_, mark, text){
+      idx++; const checked = !!mark;
+      return `<li><label class="todo-line"><input type="checkbox" class="todo-box" data-idx="${idx}" ${checked?'checked':''}><span class="todo-text">${text}</span></label></li>`;
+    });
+
+    // 2) Paragraph lines: treat line starts including <br>, \n, and *after headings* </h1>..</h6>
+    html = html.replace(/(<p[^>]*>[\s\S]*?<\/p>)/g, function(_, para){
+      return para.replace(
+        /(^|<br\s*\/?>|\n|<\/h[1-6]>\s*)\s*\[\s*(x|X)?\s*\]\s+([\s\S]*?)(?=(<br\s*\/?>|\n|<\/p>|$))/g,
+        function(__, lead, mark, text){
+          idx++; const checked = !!mark;
+          return `${lead}<label class="todo-line"><input type="checkbox" class="todo-box" data-idx="${idx}" ${checked?'checked':''}><span class="todo-text">${text}</span></label>`;
+        }
+      );
+    });
+
+    bubble.innerHTML = html;
+    bubble.__todo_enhanced__ = true;
+
+    // Restore and bind
+    const boxes = bubble.querySelectorAll('input.todo-box');
+    const state = isPreview ? [] : loadState(id);
+    boxes.forEach(box => {
+      const k = parseInt(box.getAttribute('data-idx')||'-1',10);
+      if(k>=0 && state[k]) box.checked = true;
+      const label = box.closest('label.todo-line');
+      if(label) label.classList.toggle('done', !!box.checked);
+    });
+
+    bubble.addEventListener('change', function(e){
+      const box = e.target;
+      if(!(box instanceof HTMLInputElement) || !box.classList.contains('todo-box')) return;
+      const k = parseInt(box.getAttribute('data-idx')||'-1',10);
+      if(k<0) return;
+      if(!isPreview){
+        const arr = loadState(id);
+        arr[k] = box.checked ? 1 : 0;
+        saveState(id, arr);
+      }
+      const label = box.closest('label.todo-line');
+      if(label) label.classList.toggle('done', !!box.checked);
+    }, false);
+  }
+
+  function enhanceAll(root){ (root||document).querySelectorAll('.bubble.md').forEach(enhanceBubble); }
+  enhanceAll(document);
+
+  const obs = new MutationObserver(function(muts){
+    muts.forEach(m => (m.addedNodes||[]).forEach(node=>{
+      if(node.nodeType===1){
+        if(node.matches?.('.bubble.md')) enhanceBubble(node);
+        else if(node.querySelectorAll) enhanceAll(node);
+      }
+    }));
+  });
+  obs.observe(document.body, { childList:true, subtree:true });
+
+  // Patch removeOne to clear todo state (if present)
+  if(typeof window.removeOne === 'function'){
+    const _rm = window.removeOne;
+    window.removeOne = function(id){
+      try{ _rm(id); }finally{ try{ localStorage.removeItem('todo:'+id); }catch(_){ } }
+    };
+  }
+})();
+</script>
+<style>
+.bubble.md label.todo-line{ display:inline-flex; gap:.4em; align-items:baseline; user-select:none; }
+.bubble.md label.todo-line.done .todo-text{ text-decoration: line-through; opacity:.8; }
+.bubble.md input.todo-box{ cursor:pointer; }
+/* Hide bullet for checklist items only */
+.bubble.md li:has(> label.todo-line){ list-style: none; }
+</style>
+
+
+<!-- === Editor Modal === -->
+<div id="editorModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+  <div class="panel">
+    <h3 id="editTitle">編輯卡片</h3>
+    <div class="row" style="gap:8px; margin-bottom:8px;">
+      <select id="editLabel" style="max-width:160px">
+        <option value="idea">#靈感</option>
+        <option value="todo">#待辦</option>
+        <option value="quote">#摘錄</option>
+        <option value="memo">#備忘</option>
+      </select>
+      <select id="editSize" title="卡片尺寸" style="max-width:140px">
+        <option value="m">M 一般</option>
+        <option value="s">S 小卡</option>
+        <option value="l">L 寬卡</option>
+      </select>
+    </div>
+    <textarea id="editText" placeholder="在此編輯卡片 Markdown 內容…"></textarea>
+    <div id="editPreview" class="bubble md preview" style="margin-top:10px;"></div>
+    <div class="actions">
+      <button id="editCancel" class="ghost" type="button">取消 (Esc)</button>
+      <button id="editSave" class="primary" type="button">儲存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// === Editor logic ===
+(function(){
+  let editingId = null;
+  const modal = document.getElementById('editorModal');
+  const editText = document.getElementById('editText');
+  const editLabel = document.getElementById('editLabel');
+  const editSize = document.getElementById('editSize');
+  const editPreview = document.getElementById('editPreview');
+  const btnSave = document.getElementById('editSave');
+  const btnCancel = document.getElementById('editCancel');
+
+  function openEditor(id){
+    try{
+      editingId = id;
+      const msg = (typeof messages !== 'undefined') ? messages.find(m => m.id === id) : null;
+      if(!msg) return;
+      editText.value = msg.text || '';
+      editLabel.value = msg.tag || 'idea';
+      editSize.value = msg.size || 'm';
+      if (typeof mdToHtml === 'function') editPreview.innerHTML = mdToHtml(editText.value);
+      modal.classList.add('show');
+      // Focus
+      try{ editText.focus(); }catch(_){}
+    }catch(err){ console.error('openEditor failed:', err); }
+  }
+  window.openEditor = openEditor;
+
+  function closeEditor(){
+    modal.classList.remove('show');
+    editingId = null;
+  }
+  function onInput(){ if (typeof mdToHtml === 'function') editPreview.innerHTML = mdToHtml(editText.value); }
+
+  btnCancel && btnCancel.addEventListener('click', closeEditor);
+  btnSave && btnSave.addEventListener('click', function(){
+    try{
+      if (!editingId) return;
+      const i = (typeof messages !== 'undefined') ? messages.findIndex(m => m.id === editingId) : -1;
+      if (i < 0) return;
+      const m = messages[i];
+      m.text = (editText.value || '').trim();
+      m.tag  = editLabel.value || m.tag;
+      m.size = editSize.value || m.size;
+      if (typeof save === 'function') save(messages);
+      closeEditor();
+      if (typeof render === 'function') render();
+      // If in Pinterest view, reflow columns since the height may change
+      if (typeof reflowPin === 'function' && chat && (chat.classList.contains('mode-pin') || chat.classList.contains('mode-pin-mini'))){
+        requestAnimationFrame(reflowPin);
+      }
+    }catch(err){ console.error('save edit failed:', err); }
+  });
+  editText && editText.addEventListener('input', onInput);
+
+  // Close on overlay click
+  modal && modal.addEventListener('click', function(e){
+    if (e.target === modal) closeEditor();
+  });
+
+  // ESC to close
+  window.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && modal.classList.contains('show')){ e.preventDefault(); closeEditor(); }
+  });
+})();
+</script>
+
+<script>
+(function(){
+  const btn = document.getElementById('doneToolBtn');
+  if(!btn) return;
+
+  let on = false;
+  function setTool(state){
+    on = !!state;
+    document.body.classList.toggle('tool-done-on', on);
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.title = on ? '完成工具：開（點卡片切換灰階）' : '完成工具（點卡片變灰階）';
+  }
+  btn.addEventListener('click', ()=> setTool(!on));
+  setTool(false);
+
+  // 把 messages[].done 套回畫面
+  function applyDoneStyles(){
+    try{
+      document.querySelectorAll('.bubble.md').forEach(b=>{
+        const id = b && b.dataset && b.dataset.msgId ? String(b.dataset.msgId) : '';
+        const card = b.closest('.card');
+        if(!card || !id) return;
+        const msg = (typeof messages!=='undefined') ? messages.find(m => String(m.ts) === id) : null;
+        card.classList.toggle('card--done', !!(msg && msg.done));
+      });
+    }catch(_){}
+  }
+  // 攔截 render() 以便每次重繪後都生效
+  if(typeof window.render === 'function'){
+    const _render = window.render;
+    window.render = function(){
+      const r = _render.apply(this, arguments);
+      try{ applyDoneStyles(); }catch(_){}
+      return r;
+    }
+  } else {
+    applyDoneStyles();
+  }
+
+  // 啟用工具時：點卡片即可切換完成/未完成
+  document.addEventListener('click', function(e){
+    if(!on) return;
+    const card = e.target.closest && e.target.closest('.card');
+    if(!card) return;
+    // 不影響卡片內的互動元件
+    if (e.target.closest('button, a, input, textarea, select')) return;
+
+    const bubble = card.querySelector('.bubble');
+    const id = bubble && bubble.dataset && bubble.dataset.msgId ? String(bubble.dataset.msgId) : '';
+    if(id){
+      try{
+        const msg = (typeof messages!=='undefined') ? messages.find(m => String(m.ts) === id) : null;
+        if(msg){
+          msg.done = !msg.done;
+          if(typeof save === 'function') save(messages);
+        }
+      }catch(_){}
+    }
+    card.classList.toggle('card--done');
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+})();
+</script>
+<script>
+(function(){
+  const btn = document.getElementById('deleteToolBtn');
+  if(!btn) return;
+  let on = false;
+
+  function setTool(state){
+    on = !!state;
+    document.body.classList.toggle('tool-delete-on', on);
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.title = on ? '刪除工具：開（點卡片立即刪除）' : '刪除工具（點卡片直接刪除）';
+  }
+  btn.addEventListener('click', ()=> setTool(!on));
+  setTool(false);
+
+  document.addEventListener('click', function(e){
+    if(!on) return;
+    const card = e.target.closest && e.target.closest('.card');
+    if(!card) return;
+    if (e.target.closest('button, a, input, textarea, select, label')) return;
+
+    const bubble = card.querySelector('.bubble');
+    const id = bubble && bubble.dataset && bubble.dataset.msgId ? String(bubble.dataset.msgId) : '';
+    // 1) 先從資料刪除並儲存
+    try{
+      if(typeof messages !== 'undefined' && id){
+        const idx = messages.findIndex(m => String(m.ts) === id);
+        if(idx >= 0){
+          messages.splice(idx, 1);
+          if(typeof save === 'function') save(messages);
+        }
+      }
+    }catch(_){}
+
+    // 2) 視情況重繪；若沒有 render，就淡出後移除 DOM
+    let removedByRender = false;
+    try{
+      if(typeof render === 'function'){
+        try{ chat.classList.add('no-smooth'); _scrollTopBefore = chat.scrollTop; _preserveScroll = true; }catch(_){}
+        render();
+        removedByRender = true;
+      }
+    }catch(_){}
+
+    if(!removedByRender){
+      card.classList.add('is-removing');
+      setTimeout(()=>{ try{ card.remove(); }catch(_){} }, 160);
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
+})();
+</script>
+<script>
+(function(){
+  const btn = document.getElementById('editToolBtn');
+  if(!btn) return;
+  let on = false;
+
+  function setTool(state){
+    on = !!state;
+    document.body.classList.toggle('tool-edit-on', on);
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.title = on ? '編輯工具：開（點卡片立即編輯）' : '編輯工具（點卡片直接編輯）';
+  }
+  btn.addEventListener('click', ()=> setTool(!on));
+  setTool(false);
+
+  document.addEventListener('click', function(e){
+    if(!on) return;
+    const card = e.target.closest && e.target.closest('.card');
+    if(!card) return;
+    if (e.target.closest('button, a, input, textarea, select, label')) return;
+
+    const bubble = card.querySelector('.bubble');
+    const tsStr = bubble && bubble.dataset && bubble.dataset.msgId ? String(bubble.dataset.msgId) : '';
+    if(!tsStr) return;
+
+    try{
+      const msg = (typeof messages!=='undefined') ? messages.find(m => String(m.ts) === tsStr) : null;
+      if (msg && typeof openEditor === 'function'){
+        openEditor(msg.id);
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }catch(_){}
+  }, true);
+})();
+</script>
+<script>
+// === 工具互斥：完成 / 刪除 / 編輯 只能同時開一個 ===
+(function(){
+  const IDS = ['doneToolBtn','deleteToolBtn','editToolBtn'];
+
+  // 在捕獲階段先關掉其他已啟用的工具，再交給原本的 click handler 切換目前這顆
+  document.addEventListener('click', function(e){
+    const btn = e.target && e.target.closest && e.target.closest('button');
+    if(!btn) return;
+    const id = btn.id;
+    if(!IDS.includes(id)) return;
+
+    IDS.forEach(otherId => {
+      if(otherId === id) return;
+      const b = document.getElementById(otherId);
+      if(b && b.getAttribute('aria-pressed') === 'true'){
+        // 觸發原本的關閉邏輯（讓各自的 on 旗標、body class、title 都一併正確更新）
+        b.click();
+      }
+    });
+  }, true);
+
+  // 保險：若因外部程式碼導致同時有多個啟用，這裡會在載入後做一次收斂
+  window.addEventListener('load', function(){
+    const actives = IDS.map(id => document.getElementById(id))
+      .filter(Boolean)
+      .filter(b => b.getAttribute('aria-pressed') === 'true');
+    // 若同時 >1 個開啟，就留下最後一個，其他逐一觸發關閉
+    for(let i=0;i<actives.length-1;i++){
+      actives[i].click();
+    }
+  });
+})();
+</script>
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+  
+  const SUPABASE_URL = 'https://<你的>.supabase.co';        // ← 換成你的
+  const SUPABASE_ANON_KEY = 'eyJ...';                       // ← 換成你的 anon (JWT)
+  const DOC_ID = '<固定的 UUID>';                           // ← 你指定的單一文件 ID
+  
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  
+  // 先雲端，失敗再退本機
+  async function cloudLoad() {
+    try {
+      const { data, error } = await sb.from('notes')
+        .select('content, updated_at')
+        .eq('id', DOC_ID)
+        .maybeSingle();
+      if (error) throw error;
+      if (data?.content) {
+        const payload = data.content;
+        messages = Array.isArray(payload) ? payload
+                 : Array.isArray(payload.messages) ? payload.messages
+                 : [];
+        localStorage.setItem('quicknote_messages_v1', JSON.stringify(messages));
+        render();
+        console.log('Cloud loaded at', data.updated_at);
+        return;
+      }
+    } catch (e) {
+      console.warn('cloudLoad fail, fallback to local', e);
+    }
+    messages = load(); // 你原本的本機讀取
+    render();
+  }
+  
+  // 延遲 1 秒雲端存（避免每敲一字就寫）
+  let t = null;
+  function cloudSaveDebounced() {
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      try {
+        const payload = { messages };
+        const { error } = await sb.from('notes').upsert({
+          id: DOC_ID,
+          content: payload,
+          updated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+        console.log('Cloud saved');
+      } catch (e) {
+        console.error('cloudSave fail', e);
+      }
+    }, 1000);
+  }
+  
+  // 覆寫你的 save：保留本機儲存，再排程雲端
+  const _saveLocal = save; // 你原本的 save
+  save = function (list) {
+    _saveLocal(list);
+    cloudSaveDebounced();
+  };
+  
+  cloudLoad();
+</script>
+</body>
+</html>
