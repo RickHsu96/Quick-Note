@@ -1288,140 +1288,92 @@ function render(){
 </script>
 
 
-<script type="module">
-/**
- * ✅ 把下面三個常數換成你的實際值：
- *   1) SUPABASE_URL：例如 'https://xxxxx.supabase.co'
- *   2) SUPABASE_ANON_KEY：Anon 公鑰（JWT，通常以 eyJ 開頭）
- *   3) DOC_ID_DEFAULT：你的固定 UUID（同一份筆記就用同一個）
- *
- * ✅ 額外功能：
- *   - 支援以網址參數 ?doc=<uuid> 覆寫 DOC_ID，並記到 localStorage('cloudnote_doc_id')
- *   - 自動在頁首插入「雲端狀態」小圓點（綠=連線成功/同步OK，紅=離線或錯誤）
- *   - 提供 Console 輔助：window.cloudLoad()、window.cloudSaveNow()、window.cloudStatus()
- *   - 只保留一份模組，並用 window.* 存取全域函式/變數，避免作用域踩雷
- */
 
+<script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-// === 需要你填寫 ===
-const SUPABASE_URL = 'https://mrcoorhufrhjdgpyllyy.supabase.co';  // ← 改成你的
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yY29vcmh1ZnJoamRncHlsbHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzMzQ0NjUsImV4cCI6MjA3NDkxMDQ2NX0.2Ni2pVQ88EHnguQOgLrl3zWLU4IJC8pnhzREg2c5OiI'; // ← 改成你的 anon (JWT)
-let DOC_ID_DEFAULT = '2d723f43-eda4-44cf-af9a-8da806f2e890'; // ← 改成你的固定 UUID
+const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJ-PASTE-YOUR-ANON-KEY';
+let DOC_ID_DEFAULT = '00000000-0000-4000-8000-000000000000';
 
-// --- 讀取/覆寫 DOC_ID：優先順序 ?doc -> localStorage -> 預設常數
 try {
   const qdoc = new URL(location.href).searchParams.get('doc');
   const saved = window.localStorage.getItem('cloudnote_doc_id');
-  if (qdoc) {
-    DOC_ID_DEFAULT = qdoc;
-    window.localStorage.setItem('cloudnote_doc_id', qdoc);
-  } else if (saved) {
-    DOC_ID_DEFAULT = saved;
-  }
-} catch (_) {}
+  if (qdoc) { DOC_ID_DEFAULT = qdoc; window.localStorage.setItem('cloudnote_doc_id', qdoc); }
+  else if (saved) { DOC_ID_DEFAULT = saved; }
+} catch(_){}
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// --- UI：在頁首加一個「雲端狀態」chip（不動原本結構，純附加）
-function ensureCloudChip(){
-  try {
-    const header = document.querySelector('.top');
-    if (!header || header.querySelector('#cloudChip')) return;
-    const chip = document.createElement('div');
-    chip.className = 'chip'; chip.id = 'cloudChip';
-    chip.innerHTML = '<span class="dot" id="cloudDot" style="background:#ef4444"></span><span id="cloudText">離線</span>';
-    header.appendChild(chip);
-  } catch(_) {}
-}
-ensureCloudChip();
-function setCloudState(ok, msg){
-  const dot = document.getElementById('cloudDot');
-  const tx  = document.getElementById('cloudText');
-  if (dot) dot.style.background = ok ? '#10B981' : '#EF4444';
-  if (tx)  tx.textContent = ok ? (msg || '已連線') : (msg || '離線');
-}
-
-// --- 等待你的既有全域函式準備好（render/save 等）
-function waitForGlobals(check, cb, tries = 60){
+function waitForGlobals(check, cb, tries=60){
   if (check()) return void cb();
-  if (tries <= 0) return;
-  setTimeout(()=>waitForGlobals(check, cb, tries - 1), 50);
+  if (tries<=0) return;
+  setTimeout(()=>waitForGlobals(check, cb, tries-1), 50);
 }
 
-// --- 雲端讀取（成功→覆蓋 messages；失敗→退回本機） ---
 async function cloudLoad(){
-  try {
-    const { data, error } = await sb
-      .from('notes')
-      .select('content, updated_at')
-      .eq('id', DOC_ID_DEFAULT)
-      .maybeSingle();
+  try{
+    const { data, error } = await sb.from('notes')
+      .select('content, updated_at').eq('id', DOC_ID_DEFAULT).maybeSingle();
     if (error) throw error;
-
     if (data && data.content){
       const payload = data.content;
-      window.messages = Array.isArray(payload) ? payload
-                     : (Array.isArray(payload?.messages) ? payload.messages : []);
-      try { window.localStorage.setItem('quicknote_messages_v1', JSON.stringify(window.messages)); } catch(_){}
-      if (typeof window.render === 'function') window.render();
-      setCloudState(true, '已載入');
+      window.messages = Array.isArray(payload) ? payload :
+                        (Array.isArray(payload?.messages) ? payload.messages : []);
+      try{ window.localStorage.setItem('quicknote_messages_v1', JSON.stringify(window.messages)); }catch(_){}
+      if (typeof window.render==='function') window.render();
       console.log('[Cloud] loaded at', data.updated_at);
       return true;
     }
-    setCloudState(true, '無資料');
-    return false;
-  } catch (e){
+  }catch(e){
     console.warn('[Cloud] load failed:', e?.message || e);
-    setCloudState(false, '離線');
-    // fallback：使用本機
-    try {
-      if (typeof window.load === 'function'){
-        window.messages = window.load();
-        if (typeof window.render === 'function') window.render();
-      }
-    } catch(_){}
-    return false;
   }
+  try{
+    if (typeof window.load==='function'){
+      window.messages = window.load();
+      if (typeof window.render==='function') window.render();
+    }
+  }catch(_){}
+  return false;
 }
 
-// --- 雲端儲存（延遲 1 秒，避免每打字就寫一次） ---
-let _saveTimer = null;
 async function cloudSaveNow(){
-  try {
+  try{
     const payload = { messages: window.messages || [] };
-    const { error } = await sb
-      .from('notes')
-      .upsert({ id: DOC_ID_DEFAULT, content: payload, updated_at: new Date().toISOString() });
-    if (error) throw error;
-    setCloudState(true, '已同步');
-    console.log('[Cloud] saved');
+    const res = await sb.from('notes')
+      .upsert({ id: DOC_ID_DEFAULT, content: payload, updated_at: new Date().toISOString() })
+      .select('updated_at, content');
+    if (res.error) throw res.error;
+    console.log('[Cloud] saved →', res.data);
     return true;
-  } catch(e){
-    setCloudState(false, '同步失敗');
+  }catch(e){
     console.error('[Cloud] save failed:', e?.message || e);
     return false;
   }
 }
-function cloudSaveDebounced(){
-  clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => { cloudSaveNow(); }, 1000);
-}
+let _t=null;
+function cloudSaveDebounced(){ clearTimeout(_t); _t=setTimeout(()=>cloudSaveNow(), 1000); }
 
-// --- 啟動：覆寫 save() → 先本機存，再排程雲端存；並立即 cloudLoad() ---
 waitForGlobals(
-  () => typeof window.save === 'function' && typeof window.render === 'function',
+  () => typeof window.save==='function' && typeof window.render==='function',
   async () => {
     const _saveLocal = window.save;
     window.save = function(list){
-      try { _saveLocal(list); } catch(_){}
+      try{ _saveLocal(list); }catch(_){}
+      if (Array.isArray(list)) {
+        window.messages = list;             // ★ 關鍵：同步最新的 list 到全域
+      } else {
+        try{
+          const raw = window.localStorage.getItem('quicknote_messages_v1');
+          if (raw) window.messages = JSON.parse(raw);
+        }catch(_){}
+      }
       cloudSaveDebounced();
     };
     await cloudLoad();
   }
 );
 
-// --- Console helper（方便自我檢查） ---
 window.cloudLoad = cloudLoad;
 window.cloudSaveNow = cloudSaveNow;
 window.cloudStatus = () => ({
