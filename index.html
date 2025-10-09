@@ -1317,6 +1317,10 @@ const CLIENT_ID = (()=>{
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+window.supabase = sb;               // ← 讓 Console 用得到
+window.DOC_ID = DOC_ID_DEFAULT;     // ← 讓測試片段取到同一筆
+window.CLIENT_ID = CLIENT_ID;       // ← 看看兩端是否不同（避免回送被自己忽略）
+
 function asMessages(payload){
   return Array.isArray(payload) ? payload
        : (Array.isArray(payload?.messages) ? payload.messages : []);
