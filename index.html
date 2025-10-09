@@ -1289,39 +1289,54 @@ function render(){
 
 
 
+
+
 <script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const SUPABASE_URL = 'https://mrcoorhufrhjdgpyllyy.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yY29vcmh1ZnJoamRncHlsbHl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkzMzQ0NjUsImV4cCI6MjA3NDkxMDQ2NX0.2Ni2pVQ88EHnguQOgLrl3zWLU4IJC8pnhzREg2c5OiI';
-let DOC_ID_DEFAULT = '2d723f43-eda4-44cf-af9a-8da806f2e890';
+const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJ-REPLACE-ME';
+let   DOC_ID_DEFAULT    = '00000000-0000-4000-8000-000000000000';
 
-try {
-  const qdoc = new URL(location.href).searchParams.get('doc');
-  const saved = window.localStorage.getItem('cloudnote_doc_id');
-  if (qdoc) { DOC_ID_DEFAULT = qdoc; window.localStorage.setItem('cloudnote_doc_id', qdoc); }
-  else if (saved) { DOC_ID_DEFAULT = saved; }
-} catch(_){}
+try{
+  const url = new URL(location.href);
+  const qdoc = url.searchParams.get('doc');
+  const saved = localStorage.getItem('cloudnote_doc_id');
+  if(qdoc){ DOC_ID_DEFAULT = qdoc; localStorage.setItem('cloudnote_doc_id', qdoc); }
+  else if(saved){ DOC_ID_DEFAULT = saved; }
+}catch{}
+
+const CLIENT_ID = (()=>{
+  try{
+    const k='quicknote_client_id';
+    let v = sessionStorage.getItem(k);
+    if(!v){ v = (crypto?.randomUUID?.() || String(Math.random())); sessionStorage.setItem(k,v); }
+    return v;
+  }catch{ return String(Math.random()); }
+})();
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-function waitForGlobals(check, cb, tries=60){
-  if (check()) return void cb();
-  if (tries<=0) return;
-  setTimeout(()=>waitForGlobals(check, cb, tries-1), 50);
+function asMessages(payload){
+  return Array.isArray(payload) ? payload
+       : (Array.isArray(payload?.messages) ? payload.messages : []);
+}
+function setLocalAndRender(msgs){
+  try{ localStorage.setItem('quicknote_messages_v1', JSON.stringify(msgs)); }catch{}
+  window.messages = msgs;
+  if(typeof window.render === 'function') window.render();
 }
 
 async function cloudLoad(){
   try{
     const { data, error } = await sb.from('notes')
-      .select('content, updated_at').eq('id', DOC_ID_DEFAULT).maybeSingle();
-    if (error) throw error;
-    if (data && data.content){
-      const payload = data.content;
-      window.messages = Array.isArray(payload) ? payload :
-                        (Array.isArray(payload?.messages) ? payload.messages : []);
-      try{ window.localStorage.setItem('quicknote_messages_v1', JSON.stringify(window.messages)); }catch(_){}
-      if (typeof window.render==='function') window.render();
+      .select('content, updated_at')
+      .eq('id', DOC_ID_DEFAULT)
+      .maybeSingle();
+    if(error) throw error;
+    if(data && data.content){
+      const msgs = asMessages(data.content);
+      setLocalAndRender(msgs);
       console.log('[Cloud] loaded at', data.updated_at);
       return true;
     }
@@ -1329,58 +1344,74 @@ async function cloudLoad(){
     console.warn('[Cloud] load failed:', e?.message || e);
   }
   try{
-    if (typeof window.load==='function'){
-      window.messages = window.load();
-      if (typeof window.render==='function') window.render();
+    if(typeof window.load==='function'){
+      setLocalAndRender(window.load());
     }
-  }catch(_){}
+  }catch{}
   return false;
 }
 
+let _timer=null, _dirty=false;
 async function cloudSaveNow(){
   try{
-    const payload = { messages: window.messages || [] };
+    const payload = { messages: window.messages || [], last_editor: CLIENT_ID };
     const res = await sb.from('notes')
       .upsert({ id: DOC_ID_DEFAULT, content: payload, updated_at: new Date().toISOString() })
       .select('updated_at, content');
-    if (res.error) throw res.error;
+    if(res.error) throw res.error;
+    _dirty=false;
     console.log('[Cloud] saved →', res.data);
     return true;
   }catch(e){
+    _dirty=true;
     console.error('[Cloud] save failed:', e?.message || e);
     return false;
   }
 }
-let _t=null;
-function cloudSaveDebounced(){ clearTimeout(_t); _t=setTimeout(()=>cloudSaveNow(), 1000); }
+function cloudSaveDebounced(){ clearTimeout(_timer); _timer = setTimeout(()=>cloudSaveNow(), 1000); }
 
-waitForGlobals(
-  () => typeof window.save==='function' && typeof window.render==='function',
-  async () => {
-    const _saveLocal = window.save;
-    window.save = function(list){
-      try{ _saveLocal(list); }catch(_){}
-      if (Array.isArray(list)) {
-        window.messages = list;             // ★ 關鍵：同步最新的 list 到全域
-      } else {
-        try{
-          const raw = window.localStorage.getItem('quicknote_messages_v1');
-          if (raw) window.messages = JSON.parse(raw);
-        }catch(_){}
-      }
-      cloudSaveDebounced();
-    };
-    await cloudLoad();
+let _channel=null;
+function subscribeRealtime(){
+  try{
+    if(_channel) sb.removeChannel(_channel);
+    _channel = sb.channel('notes-realtime')
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'notes',
+        filter: `id=eq.${DOC_ID_DEFAULT}`
+      }, (payload) => {
+        const content = payload?.new?.content;
+        if(!content) return;
+        if(content.last_editor === CLIENT_ID) return;
+        const incoming = asMessages(content);
+        setLocalAndRender(incoming);
+        console.log('[Realtime] applied at', payload.commit_timestamp);
+      })
+      .subscribe((status)=> console.log('[Realtime] status:', status));
+  }catch(e){
+    console.warn('[Realtime] subscribe error:', e?.message || e);
   }
-);
+}
 
-window.cloudLoad = cloudLoad;
-window.cloudSaveNow = cloudSaveNow;
-window.cloudStatus = () => ({
-  url: SUPABASE_URL,
-  docId: DOC_ID_DEFAULT,
-  count: Array.isArray(window.messages) ? window.messages.length : 0
+function wait(check, cb, n=60){ if(check()) cb(); else if(n>0) setTimeout(()=>wait(check,cb,n-1), 50); }
+wait(()=> typeof window.save==='function' && typeof window.render==='function', async ()=>{
+  const _saveLocal = window.save;
+  window.save = function(list){
+    try{ _saveLocal(list); }catch{}
+    if(Array.isArray(list)) window.messages = list;
+    else{
+      try{ const raw = localStorage.getItem('quicknote_messages_v1'); if(raw) window.messages = JSON.parse(raw); }catch{}
+    }
+    _dirty = true;
+    cloudSaveDebounced();
+  };
+  await cloudLoad();
+  subscribeRealtime();
 });
+
+window.cloudLoad    = cloudLoad;
+window.cloudSaveNow = cloudSaveNow;
+window.cloudStatus  = () => ({ url: SUPABASE_URL, docId: DOC_ID_DEFAULT, dirty:_dirty, count: Array.isArray(window.messages)?window.messages.length:0 });
 </script>
+
 </body>
 </html>
